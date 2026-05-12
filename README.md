@@ -4,7 +4,7 @@
 
 <h1 align="center">Crammit</h1>
 
-<p align="center">CSV-powered flashcard quiz app. Upload your cards, master them in partitions of 10, and track your progress.</p>
+<p align="center">CSV-powered flashcard quiz app. Upload your cards, master them in adjustable partitions, and track your progress.</p>
 
 ```bash
 npm install
