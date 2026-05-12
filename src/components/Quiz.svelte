@@ -6,12 +6,12 @@
   import McqMode from './McqMode.svelte';
   import TextMode from './TextMode.svelte';
 
-  let { cards, onDone } = $props();
+  let { cards, partitionSize, onDone } = $props();
 
   let partitionIdx = $state(0);
   let partitions = $derived.by(() => {
     const p = [];
-    for (let i = 0; i < cards.length; i += 10) p.push(cards.slice(i, i + 10));
+    for (let i = 0; i < cards.length; i += partitionSize) p.push(cards.slice(i, i + partitionSize));
     return p;
   });
   let pool = $state([]);
