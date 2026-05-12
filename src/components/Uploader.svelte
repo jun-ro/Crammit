@@ -36,7 +36,7 @@ if (cards.length < 4) return;
 </script>
 
 <div class="upload">
-  <h1>LearnBetter</h1>
+  <h1>Crammit</h1>
   <p class="sub">Upload a CSV with <strong>question</strong> and <strong>answer</strong> columns.<br>Needs at least 4 rows.</p>
   <label class="btn">
     <input type="file" accept=".csv" onchange={handleFile} />
