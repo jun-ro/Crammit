@@ -1,5 +1,5 @@
 <script>
-  let { count, onStart } = $props();
+  let { count, onStart, onBack } = $props();
   let size = $state(10);
   let custom = $state('');
   let partitions = $derived(Math.ceil(count / size));
@@ -14,22 +14,15 @@
 <div class="setup">
   <h1>Crammit</h1>
   <p class="sub">{count} cards loaded — pick a partition size</p>
-
   <div class="chips">
     {#each [5, 10, 15, 20, 25] as n}
       <button class="chip" class:active={size === n} onclick={() => pick(n)}>{n}</button>
     {/each}
-    <input
-      type="number" min="1" max={count} bind:value={custom}
-      placeholder="custom"
-      class="chip-input"
-      class:active={!!custom}
-      oninput={useCustom}
-    />
+    <input type="number" min="1" max={count} bind:value={custom} placeholder="custom" class="chip-input" class:active={!!custom} oninput={useCustom} />
   </div>
-
   <p class="sub">{partitions} partition{partitions !== 1 ? 's' : ''} of ≈{size}</p>
   <button class="go" onclick={() => onStart(size)}>Start</button>
+  <button class="ghost" onclick={onBack}>Back</button>
 </div>
 
 <style>
@@ -44,4 +37,6 @@
   .chip-input::-webkit-inner-spin-button { -webkit-appearance: none; }
   .go { padding: 0.8rem 2.5rem; border: none; border-radius: 10px; background: #fff; color: #000; font-weight: 600; font-size: 1rem; cursor: pointer; }
   .go:hover { background: #ddd; }
+  .ghost { background: transparent; color: #888; font-size: 0.85rem; border: 1px solid #333; border-radius: 10px; padding: 0.6rem 1.2rem; cursor: pointer; }
+  .ghost:hover { color: #fff; border-color: #fff; }
 </style>

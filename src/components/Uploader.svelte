@@ -1,37 +1,25 @@
 <script>
-  import { loadCSV, saveCSV } from '../lib/storage.js';
   import { parseCSV, findColumns } from '../lib/csv.js';
 
-  let { onLoad } = $props();
-  let hasRestore = $state(false);
-
-  $effect(() => { hasRestore = !!loadCSV(); });
+  let { onLoad, onBack } = $props();
 
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => parseAndEmit(file.name, reader.result);
+    reader.onload = () => {
+      const text = reader.result;
+      const rows = parseCSV(text);
+      if (rows.length < 2) return;
+      const cols = findColumns(rows[0]);
+      if (!cols) return;
+      const cards = rows.slice(1)
+        .filter(r => r[cols.qi] && r[cols.ai])
+        .map(r => ({ question: r[cols.qi], answer: r[cols.ai], streak: 0, level: 1 }));
+      if (cards.length < 4) return;
+      onLoad(cards, file.name);
+    };
     reader.readAsText(file);
-  }
-
-  function restore() {
-    const saved = loadCSV();
-    if (saved) parseAndEmit(saved.n, saved.d);
-  }
-
-  function parseAndEmit(name, text) {
-    const rows = parseCSV(text);
-    if (rows.length < 2) return;
-    const cols = findColumns(rows[0]);
-    if (!cols) return;
-    const cards = rows.slice(1)
-      .filter(r => r[cols.qi] && r[cols.ai])
-      .map(r => ({ question: r[cols.qi], answer: r[cols.ai], streak: 0, level: 1 }));
-if (cards.length < 4) return;
-
-    saveCSV(name, text);
-    onLoad(cards);
   }
 </script>
 
@@ -42,9 +30,7 @@ if (cards.length < 4) return;
     <input type="file" accept=".csv" onchange={handleFile} />
     <span>Choose CSV file</span>
   </label>
-  {#if hasRestore}
-    <button class="ghost" onclick={restore}>Restore last session</button>
-  {/if}
+  <button class="ghost" onclick={onBack}>Back to dashboard</button>
 </div>
 
 <style>

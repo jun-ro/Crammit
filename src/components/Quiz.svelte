@@ -1,60 +1,74 @@
 <script>
+  import { onMount } from 'svelte';
   import { normalizeCompare } from '../lib/normalize.js';
-  import { saveSession } from '../lib/storage.js';
+  import { getSession, updateSession } from '../lib/storage.js';
   import Progress from './Progress.svelte';
   import Card from './Card.svelte';
   import McqMode from './McqMode.svelte';
   import TextMode from './TextMode.svelte';
 
-  let { cards, partitionSize, onDone } = $props();
+  let { sessionId, onDone } = $props();
 
+  let session = $state(null);
   let partitionIdx = $state(0);
-  let partitions = $derived.by(() => {
-    const p = [];
-    for (let i = 0; i < cards.length; i += partitionSize) p.push(cards.slice(i, i + partitionSize));
-    return p;
-  });
   let pool = $state([]);
   let current = $state(null);
   let answerShown = $state(false);
   let result = $state(null);
   let isMcq = $state(true);
   let mcqOptions = $state([]);
-  let allScore = $state(0);
-  let allTotal = $state(0);
   let partScore = $state(0);
   let partTotal = $state(0);
 
-  $effect(() => {
-    if (cards.length) startPartition(0);
+  onMount(() => {
+    session = getSession(sessionId);
+    if (session) startPartition(session.partitionIdx || 0);
   });
 
   function startPartition(idx) {
-    if (idx >= partitions.length) {
-      onDone({ score: allScore, total: allTotal });
+    if (!session) return;
+    const p = [];
+    for (let i = 0; i < session.cards.length; i += session.partitionSize)
+      p.push(session.cards.slice(i, i + session.partitionSize));
+    if (idx >= p.length) {
+      onDone({ allScore: (session.allScore || 0) + partScore, allTotal: (session.allTotal || 0) + partTotal });
       return;
     }
     partitionIdx = idx;
-    pool = partitions[idx].map(c => ({ ...c }));
-    allScore += partScore;
-    allTotal += partTotal;
+    pool = p[idx].map(c => ({ ...c }));
     partScore = 0;
     partTotal = 0;
-    saveSession(partitions.flat(), partitionIdx);
+    persist();
     nextCard();
   }
 
-  function pickUnmastered() {
-    const unmastered = pool.filter(c => c.streak < 3);
-    if (!unmastered.length) return -1;
-    const weights = unmastered.map(c => 1 / (c.streak + 1));
-    const tw = weights.reduce((a, b) => a + b, 0);
-    let r = Math.random() * tw;
-    for (let i = 0; i < unmastered.length; i++) {
-      r -= weights[i];
-      if (r <= 0) return pool.indexOf(unmastered[i]);
+  function persist() {
+    const all = [];
+    for (let i = 0; i < session.cards.length; i += session.partitionSize) {
+      if (i === partitionIdx * session.partitionSize) all.push(...pool);
+      else all.push(...session.cards.slice(i, i + session.partitionSize).map(c => ({ ...c })));
     }
-    return pool.indexOf(unmastered[unmastered.length - 1]);
+    updateSession(sessionId, {
+      cards: all,
+      partitionIdx,
+      partScore,
+      partTotal,
+      allScore: (session.allScore || 0) + partScore,
+      allTotal: (session.allTotal || 0) + partTotal,
+    });
+  }
+
+  function pickUnmastered() {
+    const u = pool.filter(c => c.streak < 3);
+    if (!u.length) return -1;
+    const w = u.map(c => 1 / (c.streak + 1));
+    const tw = w.reduce((a, b) => a + b, 0);
+    let r = Math.random() * tw;
+    for (let i = 0; i < u.length; i++) {
+      r -= w[i];
+      if (r <= 0) return pool.indexOf(u[i]);
+    }
+    return pool.indexOf(u[u.length - 1]);
   }
 
   function nextCard() {
@@ -69,7 +83,7 @@
 
   function generateOptions() {
     const correct = current.answer;
-    const others = cards.filter(c => c.answer !== correct).map(c => c.answer);
+    const others = session.cards.filter(c => c.answer !== correct).map(c => c.answer);
     const wrong = shuffle(others).slice(0, 3);
     mcqOptions = shuffle([correct, ...wrong]);
   }
@@ -78,18 +92,12 @@
     if (!current || answerShown) return;
     const correct = normalizeCompare(answer, current.answer);
     const idx = current._idx;
-    if (correct) {
-      pool[idx].streak = Math.min(pool[idx].streak + 1, 15);
-      pool[idx].level = Math.min(pool[idx].level + 1, 15);
-      partScore++;
-    } else {
-      pool[idx].streak = 0;
-      pool[idx].level = Math.max(pool[idx].level - 1, 1);
-    }
+    if (correct) { pool[idx].streak = Math.min(pool[idx].streak + 1, 15); pool[idx].level = Math.min(pool[idx].level + 1, 15); partScore++; }
+    else { pool[idx].streak = 0; pool[idx].level = Math.max(pool[idx].level - 1, 1); }
     partTotal++;
     result = correct;
     answerShown = true;
-    saveSession(partitions.flat(), partitionIdx);
+    persist();
   }
 
   function skipCard() {
@@ -99,48 +107,32 @@
     partTotal++;
     result = false;
     answerShown = true;
-    saveSession(partitions.flat(), partitionIdx);
+    persist();
   }
 
   function advance() {
-    allScore += partScore;
-    allTotal += partTotal;
-    partScore = 0;
-    partTotal = 0;
+    session.allScore = (session.allScore || 0) + partScore;
+    session.allTotal = (session.allTotal || 0) + partTotal;
     startPartition(partitionIdx + 1);
   }
 
-  function shuffle(arr) {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
-
-  function remaining() {
-    return pool.filter(c => c.streak < 3).length;
-  }
+  function shuffle(a) { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; }
+  function remaining() { return pool.filter(c => c.streak < 3).length; }
 </script>
 
-{#if current}
-  <Progress score={partScore} total={partTotal} remaining={remaining()} partitionLabel={'P' + (partitionIdx + 1)} totalPartitions={partitions.length} />
-
+{#if session && current}
+  <Progress score={partScore} total={partTotal} remaining={remaining()} partitionLabel={'P' + (partitionIdx + 1)} totalPartitions={Math.ceil(session.cards.length / session.partitionSize)} />
   <Card question={current.question} />
-
   {#if isMcq}
     <McqMode options={mcqOptions} disabled={answerShown} onAnswer={submitAnswer} />
   {:else}
     <TextMode disabled={answerShown} onAnswer={submitAnswer} onSkip={skipCard} />
   {/if}
-
   {#if isMcq}
     {#if !answerShown}
       <button class="skip-bar" onclick={skipCard}>I don't know</button>
     {/if}
   {/if}
-
   {#if answerShown}
     <div class="fb" class:fb-ok={result} class:fb-ko={result === false}>
       {#if result}Correct{:else}Wrong — <strong>{current.answer}</strong>{/if}

@@ -1,12 +1,19 @@
 <script>
-  let { score, total, partitionsDone, totalPartitions, onRestart } = $props();
+  import { getSession } from '../lib/storage.js';
+
+  let { sessionId, onRestart } = $props();
+  let s = $state(null);
+
+  $effect(() => { s = getSession(sessionId); });
 </script>
 
 <div class="done">
   <h1>Done</h1>
-  <p class="big">{score}/{total} ({Math.round((score / total) * 100)}%)</p>
-  <p class="sub">{partitionsDone} / {totalPartitions} partitions completed</p>
-  <button class="next" onclick={onRestart}>Start Over</button>
+  {#if s}
+    <p class="big">{s.allScore}/{s.allTotal} ({Math.round((s.allScore / s.allTotal) * 100)}%)</p>
+    <p class="sub">{Math.ceil(s.cards.length / s.partitionSize)} partitions · {s.cards.length} cards</p>
+  {/if}
+  <button class="next" onclick={onRestart}>Back to dashboard</button>
 </div>
 
 <style>
