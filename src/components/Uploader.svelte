@@ -15,7 +15,7 @@
       if (!cols) return;
       const cards = rows.slice(1)
         .filter(r => r[cols.qi] && r[cols.ai])
-        .map(r => ({ question: r[cols.qi], answer: r[cols.ai], streak: 0, level: 1 }));
+        .map(r => ({ question: r[cols.qi], answer: r[cols.ai], level: 1, mcqCorrect: 0, mcqTotal: 0, textCorrect: 0, textTotal: 0 }));
       if (cards.length < 4) return;
       onLoad(cards, file.name);
     };

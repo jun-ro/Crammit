@@ -12,6 +12,7 @@
   let session = $state(null);
   let partitionIdx = $state(0);
   let pool = $state([]);
+  let retroPool = $state([]);
   let current = $state(null);
   let answerShown = $state(false);
   let result = $state(null);
@@ -19,6 +20,17 @@
   let mcqOptions = $state([]);
   let partScore = $state(0);
   let partTotal = $state(0);
+  let retroUpdates = new Map();
+
+  function isMastered(c) {
+    return (c.mcqCorrect + c.textCorrect) >= 3 && c.mcqCorrect >= 1 && c.textCorrect >= 1;
+  }
+
+  function isFormatPoor(c, fmt) {
+    const total = fmt === 'mcq' ? c.mcqTotal : c.textTotal;
+    const correct = fmt === 'mcq' ? c.mcqCorrect : c.textCorrect;
+    return total >= 3 && correct / total < 0.3;
+  }
 
   onMount(() => {
     session = getSession(sessionId);
@@ -38,6 +50,22 @@
     pool = p[idx].map(c => ({ ...c }));
     partScore = 0;
     partTotal = 0;
+    retroUpdates = new Map();
+
+    const poorCards = [];
+    const prevEnd = idx * session.partitionSize;
+    for (let i = 0; i < prevEnd && i < session.cards.length; i++) {
+      const c = session.cards[i];
+      if (isMastered(c)) continue;
+      const mcqPoor = isFormatPoor(c, 'mcq');
+      const textPoor = isFormatPoor(c, 'text');
+      if (mcqPoor || textPoor) {
+        const fmt = !mcqPoor ? 'text' : !textPoor ? 'mcq' : textPoor && c.textTotal > 0 && c.textCorrect / c.textTotal <= (mcqPoor && c.mcqTotal > 0 ? c.mcqCorrect / c.mcqTotal : 1) ? 'text' : 'mcq';
+        poorCards.push({ ...c, _origIdx: i, _retroFormat: fmt });
+      }
+    }
+    retroPool = shuffle(poorCards).slice(0, Math.ceil(session.partitionSize * 0.3));
+
     persist();
     nextCard();
   }
@@ -47,6 +75,12 @@
     for (let i = 0; i < session.cards.length; i += session.partitionSize) {
       if (i === partitionIdx * session.partitionSize) all.push(...pool);
       else all.push(...session.cards.slice(i, i + session.partitionSize).map(c => ({ ...c })));
+    }
+    for (const [origIdx, card] of retroUpdates) {
+      const clean = { ...card };
+      delete clean._origIdx;
+      delete clean._retroFormat;
+      all[origIdx] = clean;
     }
     updateSession(sessionId, {
       cards: all,
@@ -59,9 +93,9 @@
   }
 
   function pickUnmastered() {
-    const u = pool.filter(c => c.streak < 3);
+    const u = pool.filter(c => !isMastered(c));
     if (!u.length) return -1;
-    const w = u.map(c => 1 / (c.streak + 1));
+    const w = u.map(c => 1 / ((c.mcqCorrect + c.textCorrect) + 1));
     const tw = w.reduce((a, b) => a + b, 0);
     let r = Math.random() * tw;
     for (let i = 0; i < u.length; i++) {
@@ -71,7 +105,24 @@
     return pool.indexOf(u[u.length - 1]);
   }
 
+  function pickRetroCard() {
+    retroPool = retroPool.filter(c => !isMastered(c));
+    if (!retroPool.length) return null;
+    return retroPool.splice(Math.floor(Math.random() * retroPool.length), 1)[0];
+  }
+
   function nextCard() {
+    if (retroPool.length > 0 && Math.random() < 0.3) {
+      const retro = pickRetroCard();
+      if (retro) {
+        current = retro;
+        answerShown = false;
+        result = null;
+        isMcq = retro._retroFormat === 'mcq';
+        if (isMcq) generateOptions();
+        return;
+      }
+    }
     const idx = pickUnmastered();
     if (idx === -1) { advance(); return; }
     current = { ...pool[idx], _idx: idx };
@@ -91,9 +142,37 @@
   function submitAnswer(answer) {
     if (!current || answerShown) return;
     const correct = normalizeCompare(answer, current.answer);
+    const isRetro = current._origIdx !== undefined;
+    if (isRetro) {
+      const origIdx = current._origIdx;
+      if (correct) {
+        if (isMcq) { session.cards[origIdx].mcqCorrect++; session.cards[origIdx].mcqTotal++; }
+        else { session.cards[origIdx].textCorrect++; session.cards[origIdx].textTotal++; }
+        session.cards[origIdx].level = Math.min(session.cards[origIdx].level + 1, 15);
+      } else {
+        if (isMcq) session.cards[origIdx].mcqTotal++;
+        else session.cards[origIdx].textTotal++;
+        session.cards[origIdx].level = Math.max(session.cards[origIdx].level - 1, 1);
+      }
+      retroUpdates.set(origIdx, { ...session.cards[origIdx] });
+      partScore += correct ? 1 : 0;
+      partTotal++;
+      result = correct;
+      answerShown = true;
+      persist();
+      return;
+    }
     const idx = current._idx;
-    if (correct) { pool[idx].streak = Math.min(pool[idx].streak + 1, 15); pool[idx].level = Math.min(pool[idx].level + 1, 15); partScore++; }
-    else { pool[idx].streak = 0; pool[idx].level = Math.max(pool[idx].level - 1, 1); }
+    if (correct) {
+      if (isMcq) { pool[idx].mcqCorrect++; pool[idx].mcqTotal++; }
+      else { pool[idx].textCorrect++; pool[idx].textTotal++; }
+      pool[idx].level = Math.min(pool[idx].level + 1, 15);
+      partScore++;
+    } else {
+      if (isMcq) pool[idx].mcqTotal++;
+      else pool[idx].textTotal++;
+      pool[idx].level = Math.max(pool[idx].level - 1, 1);
+    }
     partTotal++;
     result = correct;
     answerShown = true;
@@ -102,8 +181,23 @@
 
   function skipCard() {
     if (!current || answerShown) return;
-    pool[current._idx].streak = 0;
-    pool[current._idx].level = Math.max(pool[current._idx].level - 1, 1);
+    const isRetro = current._origIdx !== undefined;
+    if (isRetro) {
+      const origIdx = current._origIdx;
+      if (isMcq) session.cards[origIdx].mcqTotal++;
+      else session.cards[origIdx].textTotal++;
+      session.cards[origIdx].level = Math.max(session.cards[origIdx].level - 1, 1);
+      retroUpdates.set(origIdx, { ...session.cards[origIdx] });
+      partTotal++;
+      result = false;
+      answerShown = true;
+      persist();
+      return;
+    }
+    const idx = current._idx;
+    if (isMcq) pool[idx].mcqTotal++;
+    else pool[idx].textTotal++;
+    pool[idx].level = Math.max(pool[idx].level - 1, 1);
     partTotal++;
     result = false;
     answerShown = true;
@@ -117,7 +211,7 @@
   }
 
   function shuffle(a) { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; }
-  function remaining() { return pool.filter(c => c.streak < 3).length; }
+  function remaining() { return pool.filter(c => !isMastered(c)).length + retroPool.filter(c => !isMastered(c)).length; }
 </script>
 
 {#if session && current}
