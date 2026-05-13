@@ -9,6 +9,9 @@
 </script>
 
 <div class="dash">
+<div class="logo-row">
+    <img src="/Crammit/catread.png" alt="Crammit mascot reading" />
+  </div>
   <div class="head">
     <h1>Crammit</h1>
     <button class="btn" onclick={onUpload}>+ Upload CSV</button>
@@ -48,6 +51,8 @@
 
 <style>
   .dash { padding: 1.5rem 0; display: flex; flex-direction: column; gap: 1.25rem; }
+  .logo-row { display: flex; justify-content: flex-start; }
+  .logo-row img { width: 80px; height: auto; border-radius: 8px; }
   .head { display: flex; justify-content: space-between; align-items: center; }
   .head h1 { font-size: 1.8rem; }
   .btn { padding: 0.7rem 1.4rem; border: none; border-radius: 10px; background: #fff; color: #000; font-weight: 600; font-size: 0.9rem; cursor: pointer; white-space: nowrap; }
