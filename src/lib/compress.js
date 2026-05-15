@@ -101,7 +101,7 @@ function lexpack(cards) {
   }
   const vocab = buildVocab(cards, freq);
   const vi = new Map(vocab.map((t, i) => [t, i]));
-  return { v: 2, w: vocab, c: cards.map(c => [encodeStr(c.question, vi), encodeStr(c.answer, vi), c.level, c.mcqCorrect || 0, c.mcqTotal || 0, c.textCorrect || 0, c.textTotal || 0]) };
+  return { v: 2, w: vocab, c: cards.map(c => [encodeStr(c.question, vi), encodeStr(c.answer, vi), c.level, c.mcqCorrect || 0, c.mcqTotal || 0, c.textCorrect || 0, c.textTotal || 0, c.latex ? 1 : 0]) };
 }
 
 function packrat(cards) {
@@ -112,7 +112,7 @@ function packrat(cards) {
   }
   const pool = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
   const idx  = new Map(pool.map((s, i) => [s, i]));
-  return { v: 1, p: pool, c: cards.map(c => [idx.get(c.question), idx.get(c.answer), c.level, c.mcqCorrect || 0, c.mcqTotal || 0, c.textCorrect || 0, c.textTotal || 0]) };
+  return { v: 1, p: pool, c: cards.map(c => [idx.get(c.question), idx.get(c.answer), c.level, c.mcqCorrect || 0, c.mcqTotal || 0, c.textCorrect || 0, c.textTotal || 0, c.latex ? 1 : 0]) };
 }
 
 // Adaptive: produce both encodings, keep whichever serialises smaller.
@@ -127,10 +127,10 @@ export function decompressCards(data) {
 
   function unpackCard(arr, q, a) {
     if (arr.length >= 7) {
-      return { question: q, answer: a, level: arr[2], mcqCorrect: arr[3], mcqTotal: arr[4], textCorrect: arr[5], textTotal: arr[6] };
+      return { question: q, answer: a, level: arr[2], mcqCorrect: arr[3], mcqTotal: arr[4], textCorrect: arr[5], textTotal: arr[6], latex: !!arr[7] };
     }
     const packed = arr[2];
-    return { question: q, answer: a, level: packed & 0x0f, mcqCorrect: 0, mcqTotal: 0, textCorrect: 0, textTotal: 0 };
+    return { question: q, answer: a, level: packed & 0x0f, mcqCorrect: 0, mcqTotal: 0, textCorrect: 0, textTotal: 0, latex: false };
   }
 
   if (d.v === 1) {

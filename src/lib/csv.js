@@ -29,6 +29,8 @@ export function findColumns(header) {
   const h = header.map(c => c.toLowerCase().replace(/[^a-z]/g, ''));
   const qi = h.findIndex(c => /question|front|term/.test(c));
   const ai = h.findIndex(c => /answer|back|definition/.test(c));
-  if (qi !== -1 && ai !== -1) return { qi, ai };
-  return header.length >= 2 ? { qi: 0, ai: 1 } : null;
+  const li = h.findIndex(c => /latex/.test(c));
+  const cols = qi !== -1 && ai !== -1 ? { qi, ai } : header.length >= 2 ? { qi: 0, ai: 1 } : null;
+  if (cols && li !== -1) cols.li = li;
+  return cols;
 }

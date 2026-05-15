@@ -6,6 +6,7 @@
   import Card from './Card.svelte';
   import McqMode from './McqMode.svelte';
   import TextMode from './TextMode.svelte';
+  import LatexText from './LatexText.svelte';
 
   let { sessionId, onDone } = $props();
 
@@ -22,6 +23,15 @@
   let partTotal = $state(0);
   let retroUpdates = new Map();
 
+  // Calculator overlay state
+  let calcOpen = $state(false);
+  let calcX = $state(0);
+  let calcY = $state(0);
+  let isDragging = $state(false);
+  let ox = 0, oy = 0;
+
+  const calcUrl = import.meta.env.BASE_URL + 'calculator.html#popup';
+
   function isMastered(c) {
     return (c.mcqCorrect + c.textCorrect) >= 3 && c.mcqCorrect >= 1 && c.textCorrect >= 1;
   }
@@ -35,7 +45,28 @@
   onMount(() => {
     session = getSession(sessionId);
     if (session) startPartition(session.partitionIdx || 0);
+
+    calcX = Math.max(0, window.innerWidth / 2 - 132);
+    calcY = Math.max(10, window.innerHeight / 2 - 260);
+
+    function mm(e) {
+      if (!isDragging) return;
+      calcX = e.clientX - ox;
+      calcY = e.clientY - oy;
+    }
+    function mu() { isDragging = false; }
+    window.addEventListener('mousemove', mm);
+    window.addEventListener('mouseup', mu);
+    return () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
   });
+
+  function dragStart(e) {
+    if (e.target.closest('.calc-close')) return;
+    isDragging = true;
+    ox = e.clientX - calcX;
+    oy = e.clientY - calcY;
+    e.preventDefault();
+  }
 
   function startPartition(idx) {
     if (!session) return;
@@ -139,9 +170,14 @@
     mcqOptions = shuffle([correct, ...wrong]);
   }
 
+  function isCorrectAnswer(submitted, expected, latex) {
+    if (latex) return submitted.trim() === expected.trim();
+    return normalizeCompare(submitted, expected);
+  }
+
   function submitAnswer(answer) {
     if (!current || answerShown) return;
-    const correct = normalizeCompare(answer, current.answer);
+    const correct = isCorrectAnswer(answer, current.answer, current.latex);
     const isRetro = current._origIdx !== undefined;
     if (isRetro) {
       const origIdx = current._origIdx;
@@ -216,11 +252,11 @@
 
 {#if session && current}
   <Progress score={partScore} total={partTotal} remaining={remaining()} partitionLabel={'P' + (partitionIdx + 1)} totalPartitions={Math.ceil(session.cards.length / session.partitionSize)} />
-  <Card question={current.question} />
+  <Card question={current.question} latex={current.latex} />
   {#if isMcq}
-    <McqMode options={mcqOptions} disabled={answerShown} onAnswer={submitAnswer} />
+    <McqMode options={mcqOptions} disabled={answerShown} onAnswer={submitAnswer} latex={current.latex} />
   {:else}
-    <TextMode disabled={answerShown} onAnswer={submitAnswer} onSkip={skipCard} />
+    <TextMode disabled={answerShown} onAnswer={submitAnswer} onSkip={skipCard} latex={current.latex} />
   {/if}
   {#if isMcq}
     {#if !answerShown}
@@ -229,7 +265,16 @@
   {/if}
   {#if answerShown}
     <div class="fb" class:fb-ok={result} class:fb-ko={result === false}>
-      {#if result}Correct{:else}Wrong — <strong>{current.answer}</strong>{/if}
+      {#if result}
+        Correct
+      {:else}
+        Wrong —
+        {#if current.latex}
+          <strong><LatexText text={current.answer} /></strong>
+        {:else}
+          <strong>{current.answer}</strong>
+        {/if}
+      {/if}
     </div>
     {#if remaining() === 0}
       <button class="next" onclick={advance}>Next partition</button>
@@ -237,6 +282,47 @@
       <button class="next" onclick={nextCard}>Next</button>
     {/if}
   {/if}
+{/if}
+
+<!-- Utilities widget -->
+<div class="utilities">
+  <button
+    class="util-btn"
+    class:active={calcOpen}
+    title="TI-84 Calculator"
+    onclick={() => calcOpen = !calcOpen}
+    aria-label="Toggle calculator"
+  >
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <rect x="2.5" y="1.5" width="15" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="4.5" y="3.5" width="11" height="4" rx="1"/>
+      <rect x="4.5" y="9.5" width="3" height="2.5" rx="0.5"/>
+      <rect x="8.5" y="9.5" width="3" height="2.5" rx="0.5"/>
+      <rect x="12.5" y="9.5" width="3" height="2.5" rx="0.5"/>
+      <rect x="4.5" y="13.5" width="3" height="2.5" rx="0.5"/>
+      <rect x="8.5" y="13.5" width="3" height="2.5" rx="0.5"/>
+      <rect x="12.5" y="13" width="3" height="3" rx="0.5"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Draggable TI-84 overlay -->
+{#if calcOpen}
+  <div
+    class="calc-overlay"
+    class:dragging={isDragging}
+    style="left:{calcX}px; top:{calcY}px"
+    onmousedown={dragStart}
+    role="dialog"
+    tabindex="-1"
+    aria-label="TI-84 Calculator"
+  >
+    <div class="calc-header">
+      <span class="calc-title">TI-84 Plus CE</span>
+      <button class="calc-close" onclick={() => calcOpen = false} aria-label="Close calculator">✕</button>
+    </div>
+    <iframe class="calc-frame" src={calcUrl} title="TI-84 Calculator" sandbox="allow-scripts"></iframe>
+  </div>
 {/if}
 
 <style>
@@ -247,4 +333,61 @@
   .next:hover { background: #ddd; }
   .skip-bar { text-align: center; padding: 0.6rem; border: 1px solid #555; border-radius: 10px; background: transparent; color: #888; font-size: 0.85rem; cursor: pointer; width: 100%; }
   .skip-bar:hover { color: #fff; border-color: #fff; }
+
+  /* Utilities widget */
+  .utilities {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 100;
+  }
+  .util-btn {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    border: 1px solid #444;
+    background: #111;
+    color: #ccc;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .util-btn:hover { background: #1e1e1e; border-color: #666; color: #fff; }
+  .util-btn.active { background: #0a2a0a; border-color: #3a7a3a; color: #7afa7a; }
+
+  /* Calculator overlay */
+  .calc-overlay {
+    position: fixed;
+    z-index: 200;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.85);
+    cursor: default;
+  }
+  .calc-overlay.dragging .calc-frame { pointer-events: none; }
+  .calc-header {
+    background: #161620;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: grab;
+    user-select: none;
+    border-bottom: 1px solid #2a2a3a;
+  }
+  .calc-header:active { cursor: grabbing; }
+  .calc-title { font-size: 0.7rem; color: #888; font-family: monospace; }
+  .calc-close {
+    background: none; border: none;
+    color: #666; font-size: 0.85rem;
+    cursor: pointer; padding: 0 2px; line-height: 1;
+  }
+  .calc-close:hover { color: #fff; }
+  .calc-frame {
+    width: 284px; height: 582px;
+    border: none; display: block;
+    background: #282930;
+  }
 </style>

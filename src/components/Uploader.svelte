@@ -15,7 +15,7 @@
       if (!cols) return;
       const cards = rows.slice(1)
         .filter(r => r[cols.qi] && r[cols.ai])
-        .map(r => ({ question: r[cols.qi], answer: r[cols.ai], level: 1, mcqCorrect: 0, mcqTotal: 0, textCorrect: 0, textTotal: 0 }));
+        .map(r => ({ question: r[cols.qi], answer: r[cols.ai], latex: cols.li !== undefined && r[cols.li]?.trim() === '1', level: 1, mcqCorrect: 0, mcqTotal: 0, textCorrect: 0, textTotal: 0 }));
       if (cards.length < 4) return;
       onLoad(cards, file.name);
     };
@@ -25,7 +25,7 @@
 
 <div class="upload">
   <h1>Crammit</h1>
-  <p class="sub">Upload a CSV with <strong>question</strong> and <strong>answer</strong> columns.<br>Needs at least 4 rows.</p>
+  <p class="sub">Upload a CSV with <strong>front</strong>, <strong>back</strong> columns.<br>Add a <strong>LaTeX</strong> column (1 = enabled) for math cards.<br>Needs at least 4 rows.</p>
   <label class="btn">
     <input type="file" accept=".csv" onchange={handleFile} />
     <span>Choose CSV file</span>
